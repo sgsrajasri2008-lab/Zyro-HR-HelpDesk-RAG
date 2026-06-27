@@ -1,0 +1,19 @@
+# Environment variables
+.env
+
+# Python virtual environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# VS Code settings
+.vscode/
+
+# Streamlit cache
+.streamlit/secrets.toml
+
+# FAISS index (optional - if you want to rebuild it)
+faiss_index/
