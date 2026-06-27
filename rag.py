@@ -10,44 +10,52 @@ from config import (
     FAISS_PATH,
     EMBEDDING_MODEL,
     CHUNK_SIZE,
-    CHUNK_OVERLAP
+    CHUNK_OVERLAP,
 )
 
+# ---------------------------------------------------
+# Load all PDFs
+# ---------------------------------------------------
 
-# -----------------------------
-# Load all PDF documents
-# -----------------------------
 def load_documents():
+
     documents = []
 
-    pdf_files = sorted([
-        file for file in os.listdir(DATA_PATH)
-        if file.endswith(".pdf")
-    ])
+    if not os.path.exists(DATA_PATH):
+        raise FileNotFoundError(f"Data folder not found: {DATA_PATH}")
 
-    print(f"\nFound {len(pdf_files)} PDF files.\n")
+    pdf_files = sorted(
+        [
+            file
+            for file in os.listdir(DATA_PATH)
+            if file.endswith(".pdf")
+        ]
+    )
 
-    for file in pdf_files:
+    print(f"Found {len(pdf_files)} PDF files.")
 
-        file_path = os.path.join(DATA_PATH, file)
+    for pdf in pdf_files:
 
-        loader = PyPDFLoader(file_path)
+        path = os.path.join(DATA_PATH, pdf)
+
+        loader = PyPDFLoader(path)
 
         docs = loader.load()
 
         for doc in docs:
-            doc.metadata["source"] = file
+            doc.metadata["source"] = pdf
 
         documents.extend(docs)
 
-    print(f"Loaded {len(documents)} pages.\n")
+    print(f"Loaded {len(documents)} pages.")
 
     return documents
 
 
-# -----------------------------
-# Split documents
-# -----------------------------
+# ---------------------------------------------------
+# Split Documents
+# ---------------------------------------------------
+
 def split_documents(documents):
 
     splitter = RecursiveCharacterTextSplitter(
@@ -63,19 +71,21 @@ def split_documents(documents):
             " ",
             ""
         ]
+
     )
 
     chunks = splitter.split_documents(documents)
 
-    print(f"Created {len(chunks)} chunks.\n")
+    print(f"Created {len(chunks)} chunks.")
 
     return chunks
 
 
-# -----------------------------
+# ---------------------------------------------------
 # Embedding Model
-# -----------------------------
-def get_embedding_model():
+# ---------------------------------------------------
+
+def get_embeddings():
 
     return HuggingFaceEmbeddings(
 
@@ -92,12 +102,19 @@ def get_embedding_model():
     )
 
 
-# -----------------------------
-# Build FAISS Index
-# -----------------------------
-def create_vectorstore(chunks):
+# ---------------------------------------------------
+# Create VectorStore
+# ---------------------------------------------------
 
-    embeddings = get_embedding_model()
+def create_vectorstore():
+
+    print("Creating FAISS Index...")
+
+    docs = load_documents()
+
+    chunks = split_documents(docs)
+
+    embeddings = get_embeddings()
 
     vectorstore = FAISS.from_documents(
 
@@ -107,21 +124,24 @@ def create_vectorstore(chunks):
 
     )
 
+    os.makedirs(FAISS_PATH, exist_ok=True)
+
     vectorstore.save_local(FAISS_PATH)
 
-    print("FAISS Index Saved Successfully.\n")
+    print("FAISS Index Saved.")
 
     return vectorstore
 
 
-# -----------------------------
-# Load Existing FAISS Index
-# -----------------------------
+# ---------------------------------------------------
+# Load VectorStore
+# ---------------------------------------------------
+
 def load_vectorstore():
 
-    embeddings = get_embedding_model()
+    embeddings = get_embeddings()
 
-    vectorstore = FAISS.load_local(
+    return FAISS.load_local(
 
         FAISS_PATH,
 
@@ -131,60 +151,53 @@ def load_vectorstore():
 
     )
 
-    print("FAISS Index Loaded Successfully.\n")
 
-    return vectorstore
+# ---------------------------------------------------
+# Initialize VectorStore
+# ---------------------------------------------------
 
-
-# -----------------------------
-# Get Retriever
-# -----------------------------
-def get_retriever():
-
-    vectorstore = load_vectorstore()
-
-    retriever = vectorstore.as_retriever(
-
-        search_type="mmr",
-
-        search_kwargs={
-
-            "k": 5,
-
-            "fetch_k": 12,
-
-            "lambda_mult": 0.75
-
-        }
-
-    )
-
-    return retriever
-
-
-# -----------------------------
-# Build Vector Database
-# -----------------------------
 def initialize_vectorstore():
 
-    if os.path.exists(FAISS_PATH):
+    index_file = os.path.join(
+        FAISS_PATH,
+        "index.faiss"
+    )
 
-        print("Existing FAISS Index Found.\n")
+    pkl_file = os.path.join(
+        FAISS_PATH,
+        "index.pkl"
+    )
+
+    if os.path.exists(index_file) and os.path.exists(pkl_file):
+
+        print("Loading Existing FAISS Index...")
 
         return load_vectorstore()
 
-    print("Creating New FAISS Index...\n")
+    print("No FAISS Index Found.")
 
-    documents = load_documents()
-
-    chunks = split_documents(documents)
-
-    return create_vectorstore(chunks)
+    return create_vectorstore()
 
 
-# -----------------------------
-# Test File
-# -----------------------------
-if __name__ == "__main__":
+# ---------------------------------------------------
+# Retriever
+# ---------------------------------------------------
 
-    initialize_vectorstore()
+# ---------------------------------------------------
+# Get Retriever
+# ---------------------------------------------------
+
+def get_retriever():
+
+    vectorstore = initialize_vectorstore()
+
+    retriever = vectorstore.as_retriever(
+        search_type="mmr",
+        search_kwargs={
+            "k": 5,
+            "fetch_k": 12,
+            "lambda_mult": 0.75
+        }
+    )
+
+    return retriever
